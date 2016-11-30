@@ -59,7 +59,7 @@ print("Data loaded!")
 
 print ("Normalizing...")
 
-loadedData = np.array(list(zip(roomsFiltered, metersFiltered, floorsFiltered, distanceCenterFiltered)))
+loadedData = np.array(list(zip(rooms, meters, floors, distanceCenter)))
 
 normFile = 'norm.pkl'
 print ("Saving normalization parameters in file{0}...".format(normFile))
@@ -85,8 +85,10 @@ predictedPrices = [prediction[i]*meters[i] for i in range(len(prediction))]
 predFile = "pred.txt"
 print ("Saving predicted data in file{0}...".format(predFile))
 
+stringedPrices = '\n'.join(str(e) for e in predictedPrices)
+
 with open(predFile, 'w') as file_:
-    file_.write(prediction)
+    file_.write(stringedPrices)
 
 print ("Predicted data saved!")
 
