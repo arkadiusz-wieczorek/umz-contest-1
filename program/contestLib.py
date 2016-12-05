@@ -11,6 +11,7 @@ from collections import defaultdict
 from sklearn.linear_model import ElasticNetCV
 import sys
 from copy import deepcopy
+import re
 
 from sklearn.metrics import mean_squared_error
 from math import sqrt
@@ -34,9 +35,22 @@ def loadTrainData():
 	rooms = np.array(list(map(float, columns[1])))
 	meters = np.array(list(map(float, columns[2])))
 	floors = np.array(list(map(float, columns[3])))
+	locations = columns[4]
+	descriptions = columns[5]
 	pricesPerMeter = [a/b for a,b in zip(prices,meters)]
-	return prices, rooms, meters, floors, pricesPerMeter
+	return prices, rooms, meters, floors, pricesPerMeter, locations, descriptions
 
+
+def loadTrainPrices():
+	#reading coords
+	prices = list()
+	with open('../train/prices.tsv','r', encoding="utf8") as file:
+		tsvin = csv.reader(file, delimiter='\t')
+		for row in tsvin:
+			prices.append(float(row[0]))
+
+	return prices
+	
 
 def loadTrainCoords():
 	#reading coords
@@ -67,7 +81,9 @@ def loadDevData():
 	rooms = np.array(list(map(float, columns[0])))
 	meters = np.array(list(map(float, columns[1])))
 	floors = np.array(list(map(float, columns[2])))
-	return rooms, meters, floors
+	locations = columns[3]
+	descriptions = columns[4]
+	return rooms, meters, floors, locations, descriptions
 
 
 def loadDevCoords():
@@ -96,7 +112,7 @@ def loadDevExpected():
 	
 def loadTestData():
 	data = list()
-	with open('../test-A/train.tsv','r', encoding="utf8") as file:
+	with open('../test-A/in.tsv','r', encoding="utf8") as file:
 		tsvin = csv.reader(file, delimiter='\t')
 		for row in tsvin:
 			data.append(row)
@@ -107,7 +123,9 @@ def loadTestData():
 	rooms = np.array(list(map(float, columns[0])))
 	meters = np.array(list(map(float, columns[1])))
 	floors = np.array(list(map(float, columns[2])))
-	return rooms, meters, floors
+	locations = columns[3]
+	descriptions = columns[4]
+	return rooms, meters, floors, locations, descriptions
 
 
 def loadTestCoords():
@@ -137,12 +155,111 @@ def getDistanceToPoint(firstCoords, secondCoords, xb, yb):
 	return distanceCenter
 
 
+def checkRegex(dictionary, data, default=-1):
+	result = list()
+	for row in data:
+		result.append(default)
+		for r in dictionary.keys():
+			regex = re.compile(r,re.IGNORECASE)
+			match = regex.search(row)
+			if match is not None:
+				result[-1] = dictionary[r]
+	return result
+
+
+def getFlatType(descriptions):
+	return checkRegex({
+			'.*kawalerk.*':1,
+			'.*studio.*':1,
+			'.*blok.*':2, 
+			'.*niskim? blok.*':3,
+			'.*apartament.*':5,
+			'.*apartamentow.*':4,
+			'.*jednorodz.*':6,
+			'.*szeregow.*':6,
+			'.*blizniak.*':6},
+		descriptions,
+		default=0)
+
+
+def getCondition(descriptions):
+	return checkRegex(
+	{
+		'.*do.*?remontu.*':1,
+		'.*do.*?wykoncze.*':2,
+		'.*bez wykoncz.*':2,
+		'.*odrestauro.*':3,
+		'.*rewital.*':4, 
+		'.*odnowio.*':4,
+		'.*po.*?remoncie.*':5,
+		'.*wyremontow.*':5,
+		'.*pod klucz.*':6,
+		'.*peln.*?wyposaz.*':6},
+	descriptions,
+	default=0)
+
+	
+def getProtected(descriptions):
+	return checkRegex(
+	{
+		'.*monitor.*':1,
+		'.*strzezo.*':1,
+		'.*ochrona.*':1,
+		'.*chronion.*':1,
+		},
+	descriptions,
+	default=0)
+
+
+def getParking(descriptions):
+	return checkRegex(
+	{
+		'.*parking.*':1,
+		'.*postoj.*':1,
+		'.*garaz.*':2
+		},
+	descriptions,
+	default=0)
+
+
+def getKitchen(descriptions):
+	return checkRegex(
+	{
+		'.*aneks.*':1,
+		'.*kuchni.*':2
+		},
+	descriptions,
+	default=1)
+
+
+def getHardLocalization(descriptions):
+	return checkRegex(
+	{
+		'.*now.*?osiedl.*':1,
+		'.*taras.*?warty*':2
+		},
+	descriptions,
+	default=0)	
+
+
+def getGarden(descriptions):
+	return checkRegex(
+	{
+		'.*ogrodek.*':1,
+		'.*ogrodkiem.*':1,
+		'.*dzialk.*':1
+		},
+	descriptions,
+	default=0)
+	
+
 def _rejectOutliers__(data, m):
 	matching = set();
 	for i in range(len(data)):
 		if (abs(data[i] - np.mean(data)) < m * np.std(data)):
 			matching.add(i)
 	return matching
+
 
 def removeOutliers(data, normalizationParams):
 	sets = list()
@@ -178,3 +295,7 @@ def createRegression(data, expected, regressor):
 def predict(data, regresor):
 	pred = regresor.predict(np.array(list(zip(*data))))
 	return pred
+	
+def compress(data, selectors):
+    # compress('ABCDEF', [1,0,1,0,1,1]) --> A C E F
+    return [d for d, s in zip(data, selectors) if s]
